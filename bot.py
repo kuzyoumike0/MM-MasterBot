@@ -11,7 +11,7 @@ async def on_ready():
     print(f"{bot.user} が起動しました！")
 
 async def main():
-    await bot.load_extension("cogs.phase_controller")
-    await bot.start(os.getenv("TOKEN"))  # または config.pyからTOKEN読み込み
+    await bot.load_extension("cogs.auth_role")
+    await bot.start(os.getenv("TOKEN"))
 
 asyncio.run(main())
