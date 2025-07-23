@@ -1,0 +1,49 @@
+import discord
+from discord.ext import commands
+import os
+
+class BulkFileSenderByName(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.command(name="bulk_send_file_by_name")
+    @commands.has_permissions(administrator=True)
+    async def bulk_send_file_by_name(self, ctx, file_path: str, *channel_names: str):
+        """
+        指定した複数チャンネル名に同じファイルを一括送信します。
+        使用例:
+        !bulk_send_file_by_name /path/to/file.png general random
+        """
+        if not os.path.isfile(file_path):
+            await ctx.send(f"ファイルが見つかりません: {file_path}")
+            return
+
+        file = discord.File(file_path)
+
+        guild = ctx.guild
+        if not guild:
+            await ctx.send("このコマンドはサーバー内で実行してください。")
+            return
+
+        success_channels = []
+        failed_channels = []
+
+        for ch_name in channel_names:
+            channel = discord.utils.get(guild.text_channels, name=ch_name)
+            if channel:
+                try:
+                    await channel.send(file=file)
+                    success_channels.append(channel.name)
+                except Exception as e:
+                    failed_channels.append(f"{ch_name} (Error: {e})")
+            else:
+                failed_channels.append(f"チャンネル名 '{ch_name}' が見つかりません")
+
+        msg = f"ファイル送信完了\n成功: {', '.join(success_channels) if success_channels else 'なし'}"
+        if failed_channels:
+            msg += f"\n失敗: {', '.join(failed_channels)}"
+
+        await ctx.send(msg)
+
+async def setup(bot):
+    await bot.add_cog(BulkFileSenderByName(bot))
