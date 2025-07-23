@@ -1,62 +1,94 @@
 import discord
 from discord.ext import commands
-from collections import defaultdict
-import json
-import os
+from discord import app_commands
+from discord.ui import View, Button
+from typing import List, Dict
+import asyncio
 
-DATA_FILE = "tally_data.json"
-
-class TallyResults(commands.Cog):
-    def __init__(self, bot):
+class VoteButton(Button):
+    def __init__(self, label: str, vote_id: str, bot, vote_data: dict):
+        super().__init__(label=label, style=discord.ButtonStyle.primary)
+        self.vote_id = vote_id
         self.bot = bot
-        self.tally_data = defaultdict(list)
-        self.load_data()
+        self.vote_data = vote_data
+        self.choice = label
 
-    def load_data(self):
-        if os.path.exists(DATA_FILE):
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                self.tally_data = json.load(f)
+    async def callback(self, interaction: discord.Interaction):
+        user_id = str(interaction.user.id)
 
-    def save_data(self):
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(self.tally_data, f, indent=2, ensure_ascii=False)
+        # ユーザーがすでに投票しているか確認
+        if user_id in self.vote_data[self.vote_id]["votes"]:
+            await interaction.response.send_message("すでに投票しています。", ephemeral=True)
+            return
 
-    @commands.command(name="add_vote")
-    async def add_vote(self, ctx, category: str, *, vote: str):
-        """集計データに投票を追加します。例: !add_vote 好きなキャラ 鈴木"""
-        self.tally_data.setdefault(category, []).append(vote)
-        self.save_data()
-        await ctx.send(f"✅ {ctx.author.display_name} の投票を追加しました。")
+        # 投票記録
+        self.vote_data[self.vote_id]["votes"][user_id] = self.choice
+        await interaction.response.send_message(f"「{self.choice}」に投票しました。", ephemeral=True)
 
-    @commands.command(name="show_results")
-    async def show_results(self, ctx, *, category: str):
-        """指定カテゴリの投票結果を集計して表示します。例: !show_results 好きなキャラ"""
-        if category not in self.tally_data:
-            return await ctx.send("⚠️ 指定されたカテゴリは存在しません。")
+class VoteView(View):
+    def __init__(self, options: List[str], vote_id: str, bot, vote_data: dict, timeout=600):
+        super().__init__(timeout=timeout)
+        for option in options:
+            self.add_item(VoteButton(option, vote_id, bot, vote_data))
 
-        votes = self.tally_data[category]
-        result_count = defaultdict(int)
-        for v in votes:
-            result_count[v] += 1
+class ButtonVote(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
+        self.vote_data: Dict[str, dict] = {}  # {vote_id: {"question": str, "options": [str], "votes": {user_id: choice}}}
+        self.vote_counter = 0
 
-        sorted_results = sorted(result_count.items(), key=lambda x: x[1], reverse=True)
+    @app_commands.command(name="start_vote", description="ボタンで投票を開始する")
+    @app_commands.describe(question="投票の質問", options="選択肢（カンマ区切り）")
+    async def start_vote(self, interaction: discord.Interaction, question: str, options: str):
+        opts = [opt.strip() for opt in options.split(",") if opt.strip()]
+        if len(opts) < 2:
+            await interaction.response.send_message("選択肢は2つ以上必要です。", ephemeral=True)
+            return
 
-        result_msg = f"📊 **「{category}」の投票結果**\n"
-        for i, (option, count) in enumerate(sorted_results, start=1):
-            result_msg += f"{i}. {option}: {count}票\n"
+        self.vote_counter += 1
+        vote_id = f"vote_{self.vote_counter}"
 
-        await ctx.send(result_msg)
+        # 投票データ保存
+        self.vote_data[vote_id] = {
+            "question": question,
+            "options": opts,
+            "votes": {}
+        }
 
-    @commands.command(name="reset_results")
-    @commands.has_permissions(administrator=True)
-    async def reset_results(self, ctx, *, category: str):
-        """指定カテゴリの集計結果をリセットします（管理者専用）"""
-        if category in self.tally_data:
-            del self.tally_data[category]
-            self.save_data()
-            await ctx.send(f"🗑️ 「{category}」の集計をリセットしました。")
-        else:
-            await ctx.send("⚠️ 指定されたカテゴリは存在しません。")
+        embed = discord.Embed(
+            title="📊 投票開始",
+            description=question,
+            color=discord.Color.green()
+        )
+        embed.add_field(name="選択肢", value="\n".join(opts), inline=False)
+
+        view = VoteView(opts, vote_id, self.bot, self.vote_data)
+        await interaction.response.send_message(embed=embed, view=view)
+    
+    @app_commands.command(name="vote_result", description="投票の結果を表示する")
+    @app_commands.describe(vote_number="投票ID番号（例: 1）")
+    async def vote_result(self, interaction: discord.Interaction, vote_number: int):
+        vote_id = f"vote_{vote_number}"
+        if vote_id not in self.vote_data:
+            await interaction.response.send_message("指定された投票IDは存在しません。", ephemeral=True)
+            return
+        
+        data = self.vote_data[vote_id]
+        counts = {opt: 0 for opt in data["options"]}
+        for vote in data["votes"].values():
+            if vote in counts:
+                counts[vote] += 1
+
+        result_lines = [f"**{opt}**: {count}票" for opt, count in counts.items()]
+        embed = discord.Embed(
+            title="📢 投票結果",
+            description=data["question"],
+            color=discord.Color.blurple()
+        )
+        embed.add_field(name="集計", value="\n".join(result_lines), inline=False)
+        embed.set_footer(text=f"投票数: {len(data['votes'])}")
+
+        await interaction.response.send_message(embed=embed)
 
 async def setup(bot):
-    await bot.add_cog(TallyResults(bot))
+    await bot.add_cog(ButtonVote(bot))
