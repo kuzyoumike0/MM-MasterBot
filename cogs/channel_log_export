@@ -1,0 +1,111 @@
+import discord
+from discord.ext import commands
+import asyncio
+import datetime
+import os
+import html
+
+class ChannelLogExporter(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.command(name="export_channel_log")
+    @commands.has_permissions(read_message_history=True)
+    async def export_channel_log(self, ctx, channel_name: str = None, limit: int = 1000):
+        """
+        指定チャンネルのメッセージログをテキスト＆HTMLファイルに出力し、ユーザーアイコンURLも記載します。
+        channel_name: 対象チャンネル名。未指定ならコマンド実行チャンネル
+        limit: 取得するメッセージ数（最大1000推奨）
+        
+        使用例:
+        !export_channel_log general 500
+        """
+        guild = ctx.guild
+        if not guild:
+            await ctx.send("サーバー内で実行してください。")
+            return
+
+        if channel_name:
+            channel = discord.utils.get(guild.text_channels, name=channel_name)
+            if not channel:
+                await ctx.send(f"チャンネル '{channel_name}' が見つかりません。")
+                return
+        else:
+            channel = ctx.channel
+
+        await ctx.send(f"{channel.name} のメッセージを最大 {limit} 件取得中…少々お待ちください。")
+
+        messages = []
+        try:
+            async for message in channel.history(limit=limit, oldest_first=True):
+                timestamp = message.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                author = message.author
+                author_name = html.escape(author.display_name)
+                author_id = author.id
+                avatar_url = author.display_avatar.url if author.display_avatar else ""
+                content = html.escape(message.content).replace("\n", "<br>")
+                messages.append({
+                    "timestamp": timestamp,
+                    "author_name": author_name,
+                    "author_id": author_id,
+                    "avatar_url": avatar_url,
+                    "content": content,
+                })
+        except discord.Forbidden:
+            await ctx.send("権限が不足していてメッセージ履歴を取得できません。")
+            return
+        except Exception as e:
+            await ctx.send(f"エラーが発生しました: {e}")
+            return
+
+        if not messages:
+            await ctx.send("メッセージが見つかりませんでした。")
+            return
+
+        safe_guild_name = "".join(c for c in guild.name if c.isalnum() or c in (' ', '_', '-')).rstrip()
+        safe_channel_name = "".join(c for c in channel.name if c.isalnum() or c in (' ', '_', '-')).rstrip()
+        timestamp_str = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+
+        txt_filename = f"{safe_guild_name}_{safe_channel_name}_log_{timestamp_str}.txt"
+        html_filename = f"{safe_guild_name}_{safe_channel_name}_log_{timestamp_str}.html"
+
+        # テキストファイル書き込み
+        with open(txt_filename, "w", encoding="utf-8") as ftxt:
+            for msg in messages:
+                line = (
+                    f"[{msg['timestamp']}] {msg['author_name']} (ID: {msg['author_id']})\n"
+                    f"Icon: {msg['avatar_url']}\n"
+                    f"{msg['content'].replace('<br>', ' ')}\n\n"
+                )
+                ftxt.write(line)
+
+        # HTMLファイル書き込み
+        with open(html_filename, "w", encoding="utf-8") as fhtml:
+            fhtml.write("<html><head><meta charset='utf-8'><title>Discord Channel Log</title></head><body>")
+            fhtml.write(f"<h2>Channel: {safe_channel_name} / Server: {safe_guild_name}</h2>")
+            for msg in messages:
+                fhtml.write(
+                    f"<div style='margin-bottom:15px;'>"
+                    f"<img src='{msg['avatar_url']}' alt='icon' width='32' height='32' style='vertical-align:middle; border-radius:16px;'> "
+                    f"<strong>{msg['author_name']}</strong> <small>(ID: {msg['author_id']})</small><br>"
+                    f"<small>{msg['timestamp']}</small><br>"
+                    f"<p style='margin-left:40px;'>{msg['content']}</p>"
+                    f"</div>"
+                )
+            fhtml.write("</body></html>")
+
+        # ファイル送信
+        await ctx.send("ログファイルを作成しました。", files=[
+            discord.File(txt_filename),
+            discord.File(html_filename)
+        ])
+
+        # 作成ファイルを削除（不要ならコメントアウト）
+        try:
+            os.remove(txt_filename)
+            os.remove(html_filename)
+        except Exception:
+            pass
+
+async def setup(bot):
+    await bot.add_cog(ChannelLogExporter(bot))
