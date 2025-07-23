@@ -25,17 +25,21 @@ class AuthRole(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def setup_auth_message(self, ctx, *, pairs: str):
         """
-        リアクション認証メッセージを作成し、絵文字-ロール対応を登録する。
+        リアクション認証メッセージを作成し、絵文字-ロール名対応を登録する。
         例:
-          !setup_auth_message ✅=123456789012345678 🎭=234567890123456789 📢=345678901234567890
+          !setup_auth_message ✅=参加者 🎭=演者 📢=スタッフ
         """
         try:
             emoji_role_map = {}
             for pair in pairs.split():
-                emoji, role_id = pair.split("=")
-                emoji_role_map[emoji] = int(role_id)
+                emoji, role_name = pair.split("=")
+                role = discord.utils.get(ctx.guild.roles, name=role_name)
+                if role is None:
+                    await ctx.send(f"ロール名 `{role_name}` が見つかりません。正確に入力してください。")
+                    return
+                emoji_role_map[emoji] = role.id
         except Exception:
-            await ctx.send("形式が正しくありません。例: `!setup_auth_message ✅=123456789012 🎭=234567890123`")
+            await ctx.send("形式が正しくありません。例: `!setup_auth_message ✅=参加者 🎭=演者`")
             return
 
         embed = discord.Embed(
@@ -45,14 +49,12 @@ class AuthRole(commands.Cog):
         )
         msg = await ctx.send(embed=embed)
 
-        # メッセージにリアクションをつける
         for emoji in emoji_role_map.keys():
             try:
                 await msg.add_reaction(emoji)
             except Exception as e:
                 await ctx.send(f"リアクションの追加に失敗しました: {emoji} ({e})")
 
-        # 設定を保存（message_idキーで）
         self.auth_config[str(msg.id)] = {
             "guild_id": ctx.guild.id,
             "channel_id": ctx.channel.id,
