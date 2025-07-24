@@ -12,7 +12,8 @@ try:
 except Exception:
     print("[⚠️] dotenvの読み込みに失敗しました。環境変数が直接設定されているか確認してください。")
 
-TOKEN = os.getenv("TOKEN")
+# 環境変数名を統一するため 'DISCORD_BOT_TOKEN' に変更
+TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 # Intents（必要に応じて調整可。Voice・DM・メッセージなど一通り有効化）
 intents = discord.Intents.all()
@@ -45,7 +46,7 @@ async def load_cogs():
 async def main():
     global TOKEN
     if not TOKEN:
-        print("[❗] TOKEN が .env または環境変数に設定されていません。")
+        print("[❗] DISCORD_BOT_TOKEN が .env または環境変数に設定されていません。")
         print("環境変数にトークンをセットしてから再起動してください。")
         return
 
