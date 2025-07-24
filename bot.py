@@ -1,14 +1,21 @@
+# bot.py
 import discord
 from discord.ext import commands
 import asyncio
+import os
+from dotenv import load_dotenv
 
-# Botのプレフィックスはスラッシュコマンドをメインに使うので最低限設定
-intents = discord.Intents.default()
-intents.message_content = True  # 必要に応じて
+# .envファイルから環境変数をロード
+load_dotenv()
+TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
+# 全Intentsを有効化（音声・ステータス・DM・リアクション・メッセージ等）
+intents = discord.Intents.all()
+
+# Botインスタンス作成
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Cog群のファイル名リスト
+# Cogファイル（cogsディレクトリ内の.pyファイル名から拡張子を除いたもの）
 COG_LIST = [
     "auth_role",
     "bulk_message_sender",
@@ -26,29 +33,38 @@ COG_LIST = [
     "summary_bot",
     "vc_move_manager",
     "voice_channel_manager",
-    "helpme"  # 先ほど作成したHelpMe Cog
+    "helpme"
 ]
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user} (ID: {bot.user.id})")
-    print("------")
-    # スラッシュコマンドを同期（サーバーごとに同期を細かく調整可能）
-    await bot.tree.sync()
-    print("Slash commands synced.")
+    print(f"[✅] Logged in as {bot.user} (ID: {bot.user.id})")
+    try:
+        synced = await bot.tree.sync()
+        print(f"[🌐] Synced {len(synced)} slash commands.")
+    except Exception as e:
+        print(f"[⚠️] Failed to sync slash commands: {e}")
 
-async def main():
-    # Cogを一括ロード
+async def load_all_cogs():
     for cog in COG_LIST:
         try:
             await bot.load_extension(f"cogs.{cog}")
-            print(f"Loaded cog: {cog}")
+            print(f"[🔧] Loaded cog: {cog}")
         except Exception as e:
-            print(f"Failed to load cog {cog}: {e}")
+            print(f"[❌] Failed to load cog '{cog}': {e}")
 
-    # Botトークンは環境変数や外部管理推奨
-    TOKEN = "YOUR_BOT_TOKEN_HERE"
-    await bot.start(TOKEN)
+async def start_bot():
+    if not TOKEN:
+        print("[❗] DISCORD_BOT_TOKEN is not set in .env file.")
+        return
+    await load_all_cogs()
+    try:
+        await bot.start(TOKEN)
+    except discord.LoginFailure:
+        print("[❌] Invalid Discord bot token.")
+    except Exception as e:
+        print(f"[❌] Unexpected error during bot startup: {e}")
 
+# 直接実行された場合（main.py とは別にスタンドアロン実行も可能）
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(start_bot())
