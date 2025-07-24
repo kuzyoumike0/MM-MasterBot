@@ -11,8 +11,8 @@ try:
 except Exception:
     print("[⚠️] dotenvが読み込めません。環境変数が直接設定されているか確認してください。")
 
-# DISCORD_BOT_TOKEN を環境変数から取得
-TOKEN = os.getenv("TOKEN")
+# 環境変数名を "DISCORD_BOT_TOKEN" に統一
+TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 # 全Intentsを有効化（音声・ステータス・DM・リアクション・メッセージ等）
 intents = discord.Intents.all()
@@ -60,10 +60,14 @@ async def load_all_cogs():
 
 async def start_bot():
     global TOKEN
-    # トークンが設定されていない場合は起動前に入力を促す
+    # トークンが設定されていない場合は入力プロンプト（非対話環境では起動中断）
     if not TOKEN:
         print("[❗] DISCORD_BOT_TOKEN が環境変数に設定されていません。")
-        TOKEN = input("🔐 Botのトークンを入力してください: ").strip()
+        try:
+            TOKEN = input("🔐 Botのトークンを入力してください: ").strip()
+        except EOFError:
+            print("[❌] 入力待機中にEOFエラーが発生しました。非対話環境では環境変数の設定を推奨します。")
+            return
         if not TOKEN:
             print("[❌] トークンが入力されなかったため、起動を中止します。")
             return
