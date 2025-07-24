@@ -53,4 +53,59 @@ class TwitterPeriodicPoster(commands.Cog):
             await ctx.send(f"Twitter API取得エラー: {e}")
             return
 
-        await ctx.send(f"Twitterユーザー `{twit
+        await ctx.send(f"Twitterユーザー `{twitter_username}` のツイートを監視します。")
+
+    @tasks.loop(seconds=300)  # 5分ごとにチェック
+    async def twitter_check_task(self):
+        for guild_id, channel_map in self.twitter_usernames.items():
+            guild = self.bot.get_guild(guild_id)
+            if not guild:
+                continue
+            for channel_id, username in channel_map.items():
+                channel = guild.get_channel(channel_id)
+                if not channel:
+                    continue
+
+                last_tweet_id = self.last_tweet_ids.get(guild_id, {}).get(username)
+
+                try:
+                    # 新しいツイート取得（since_idで前回以降のツイートのみ取得）
+                    tweets = self.twitter_client.user_timeline(
+                        screen_name=username,
+                        since_id=last_tweet_id,
+                        tweet_mode="extended",
+                        count=5
+                    )
+                except Exception as e:
+                    # APIエラーなどはログ出力のみ
+                    print(f"[TwitterPeriodicPoster] Twitter API取得エラー: {e}")
+                    continue
+
+                # 新しいツイートがあれば昇順にしてメッセージ送信
+                if tweets:
+                    tweets = sorted(tweets, key=lambda t: t.id)
+                    for tweet in tweets:
+                        # URL生成
+                        tweet_url = f"https://twitter.com/{username}/status/{tweet.id}"
+                        # テキスト取得（リツイートや引用など対応）
+                        content = tweet.full_text
+                        # メンションを避けるためバッククォートで囲む場合もあるがそのまま送信
+                        embed = discord.Embed(description=content, timestamp=tweet.created_at)
+                        embed.set_author(name=f"@{username} on Twitter", url=f"https://twitter.com/{username}")
+                        embed.add_field(name="リンク", value=f"[ツイートを見る]({tweet_url})", inline=False)
+
+                        # アイコン設定（APIから取得できる場合）
+                        if hasattr(tweet.user, "profile_image_url_https"):
+                            embed.set_thumbnail(url=tweet.user.profile_image_url_https)
+
+                        await channel.send(embed=embed)
+
+                    # 最後に取得したツイートIDを保存
+                    self.last_tweet_ids[guild_id][username] = tweets[-1].id
+
+    @twitter_check_task.before_loop
+    async def before_twitter_check(self):
+        await self.bot.wait_until_ready()
+
+async def setup(bot):
+    await bot.add_cog(TwitterPeriodicPoster(bot))
