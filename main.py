@@ -44,13 +44,10 @@ async def load_cogs():
 
 async def main():
     global TOKEN
-    # トークンがなければ起動前に標準入力から取得を試みる
     if not TOKEN:
-        print("[❗] DISCORD_BOT_TOKEN が .env に設定されていません。")
-        TOKEN = input("🔐 Botのトークンを入力してください: ").strip()
-        if not TOKEN:
-            print("[❌] トークンが入力されなかったため、起動を中止します。")
-            return
+        print("[❗] DISCORD_BOT_TOKEN が .env または環境変数に設定されていません。")
+        print("環境変数にトークンをセットしてから再起動してください。")
+        return
 
     await load_cogs()
 
