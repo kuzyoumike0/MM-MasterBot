@@ -12,7 +12,7 @@ except Exception:
     print("[⚠️] dotenvが読み込めません。環境変数が直接設定されているか確認してください。")
 
 # DISCORD_BOT_TOKEN を環境変数から取得
-TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+TOKEN = os.getenv("TOKEN")
 
 # 全Intentsを有効化（音声・ステータス・DM・リアクション・メッセージ等）
 intents = discord.Intents.all()
