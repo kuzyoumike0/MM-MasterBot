@@ -6,8 +6,12 @@ import os
 from dotenv import load_dotenv
 import glob
 
-# .envから環境変数を読み込む
-load_dotenv()
+# .envから環境変数を読み込む（存在しなくても続行）
+try:
+    load_dotenv()
+except Exception:
+    print("[⚠️] dotenvの読み込みに失敗しました。環境変数が直接設定されているか確認してください。")
+
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 # Intents（必要に応じて調整可。Voice・DM・メッセージなど一通り有効化）
@@ -20,8 +24,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 async def on_ready():
     print(f"[✅] Bot is ready: {bot.user} (ID: {bot.user.id})")
     try:
-        await bot.tree.sync()
-        print("[🌐] Slash commands synced.")
+        synced = await bot.tree.sync()
+        print(f"[🌐] Slash commands synced ({len(synced)} commands).")
     except Exception as e:
         print(f"[⚠️] Slash command sync failed: {e}")
 
@@ -39,11 +43,17 @@ async def load_cogs():
             print(f"[❌] Failed to load cog '{cog_name}': {e}")
 
 async def main():
+    global TOKEN
+    # トークンがなければ起動前に標準入力から取得を試みる
     if not TOKEN:
         print("[❗] DISCORD_BOT_TOKEN が .env に設定されていません。")
-        return
+        TOKEN = input("🔐 Botのトークンを入力してください: ").strip()
+        if not TOKEN:
+            print("[❌] トークンが入力されなかったため、起動を中止します。")
+            return
 
     await load_cogs()
+
     try:
         await bot.start(TOKEN)
     except discord.LoginFailure:
