@@ -5,8 +5,13 @@ import asyncio
 import os
 from dotenv import load_dotenv
 
-# .envファイルから環境変数をロード
-load_dotenv()
+# .envファイルから環境変数をロード（無ければスキップ）
+try:
+    load_dotenv()
+except Exception:
+    print("[⚠️] dotenvが読み込めません。環境変数が直接設定されているか確認してください。")
+
+# DISCORD_BOT_TOKEN を環境変数から取得
 TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 
 # 全Intentsを有効化（音声・ステータス・DM・リアクション・メッセージ等）
@@ -54,16 +59,22 @@ async def load_all_cogs():
             print(f"[❌] Failed to load cog '{cog}': {e}")
 
 async def start_bot():
+    global TOKEN
+    # トークンが設定されていない場合は起動前に入力を促す
     if not TOKEN:
-        print("[❗] DISCORD_BOT_TOKEN is not set in .env file.")
-        return
+        print("[❗] DISCORD_BOT_TOKEN が環境変数に設定されていません。")
+        TOKEN = input("🔐 Botのトークンを入力してください: ").strip()
+        if not TOKEN:
+            print("[❌] トークンが入力されなかったため、起動を中止します。")
+            return
+
     await load_all_cogs()
     try:
         await bot.start(TOKEN)
     except discord.LoginFailure:
-        print("[❌] Invalid Discord bot token.")
+        print("[❌] Discord bot token が無効です。")
     except Exception as e:
-        print(f"[❌] Unexpected error during bot startup: {e}")
+        print(f"[❌] Bot起動中に予期せぬエラーが発生しました: {e}")
 
 # 直接実行された場合（main.py とは別にスタンドアロン実行も可能）
 if __name__ == "__main__":
